@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: #1a1a2e;
+    color: #eee;
+  }
+  h1 { margin-bottom: 0.5rem; font-size: 2rem; }
+  #status {
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+    min-height: 1.5em;
+  }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(3, 120px);
+    grid-template-rows: repeat(3, 120px);
+    gap: 6px;
+  }
+  .cell {
+    background: #16213e;
+    border: none;
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #eee;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .cell:hover:not(.taken) { background: #1a2a50; }
+  .cell.x { color: #e94560; }
+  .cell.o { color: #00b4d8; }
+  .cell.win { background: #2a4a3e; }
+  #restart {
+    margin-top: 1.5rem;
+    padding: 0.6rem 1.6rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    background: #e94560;
+    color: #fff;
+    cursor: pointer;
+  }
+  #restart:hover { background: #c73652; }
+  .back-home {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    border: none;
+    border-radius: 6px;
+    background: #16213e;
+    color: #eee;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .back-home:hover { background: #1a2a50; }
+</style>
+</head>
+<body>
+<a class="back-home" href="../games/index.html">&#8592; Home</a>
+<h1>Tic Tac Toe</h1>
+<div id="status">X's turn</div>
+<div id="board"></div>
+<button id="restart">Restart</button>
+<script>
+const board = document.getElementById('board');
+const status = document.getElementById('status');
+const restartBtn = document.getElementById('restart');
+const WIN_COMBOS = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+let cells, currentPlayer, gameOver;
+
+function init() {
+  board.innerHTML = '';
+  cells = Array(9).fill('');
+  currentPlayer = 'X';
+  gameOver = false;
+  status.textContent = "X's turn";
+  for (let i = 0; i < 9; i++) {
+    const btn = document.createElement('button');
+    btn.classList.add('cell');
+    btn.dataset.index = i;
+    btn.addEventListener('click', handleClick);
+    board.appendChild(btn);
+  }
+}
+
+function handleClick(e) {
+  const i = e.target.dataset.index;
+  if (gameOver || cells[i]) return;
+  cells[i] = currentPlayer;
+  const btn = e.target;
+  btn.textContent = currentPlayer;
+  btn.classList.add('taken', currentPlayer.toLowerCase());
+
+  const winCombo = checkWin(currentPlayer);
+  if (winCombo) {
+    gameOver = true;
+    status.textContent = `${currentPlayer} wins!`;
+    winCombo.forEach(idx => board.children[idx].classList.add('win'));
+    return;
+  }
+  if (cells.every(c => c)) {
+    gameOver = true;
+    status.textContent = "It's a draw!";
+    return;
+  }
+  currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+  status.textContent = `${currentPlayer}'s turn`;
+}
+
+function checkWin(player) {
+  return WIN_COMBOS.find(combo => combo.every(i => cells[i] === player)) || null;
+}
+
+restartBtn.addEventListener('click', init);
+init();
+</script>
+</body>
+</html>
