@@ -68,18 +68,135 @@
     transition: background 0.15s;
   }
   .back-home:hover { background: #1a2a50; }
+
+  /* Lobby overlay */
+  #lobby {
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 26, 46, 0.97);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  #lobby.hidden { display: none; }
+  #lobby h2 { font-size: 1.8rem; margin-bottom: 2rem; }
+  .lobby-section {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1rem;
+    min-width: 320px;
+    text-align: center;
+  }
+  .lobby-section h3 { margin-bottom: 0.75rem; font-size: 1.1rem; }
+  .lobby-btn {
+    padding: 0.6rem 1.6rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    background: #e94560;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .lobby-btn:hover { background: #c73652; }
+  .lobby-btn:disabled { background: #555; cursor: not-allowed; }
+  #join-input {
+    padding: 0.5rem 0.8rem;
+    font-size: 1rem;
+    border: 2px solid #333;
+    border-radius: 6px;
+    background: #0f1629;
+    color: #eee;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    width: 8em;
+    margin-right: 0.5rem;
+  }
+  #join-input::placeholder { color: #555; text-transform: none; letter-spacing: normal; }
+  #lobby-error {
+    color: #e94560;
+    margin-top: 1rem;
+    min-height: 1.5em;
+    font-size: 0.95rem;
+  }
+  #waiting-msg {
+    margin-top: 1rem;
+    font-size: 0.95rem;
+    color: #00b4d8;
+    min-height: 1.5em;
+  }
+  #room-code-display {
+    font-size: 1.6rem;
+    font-weight: bold;
+    letter-spacing: 0.2em;
+    color: #00b4d8;
+    margin: 0.5rem 0;
+    user-select: all;
+  }
+
+  /* Connection info bar */
+  #conn-info {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: #888;
+    min-height: 1.3em;
+  }
+  #conn-info .room-tag {
+    background: #16213e;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+    letter-spacing: 0.1em;
+  }
+  #conn-info .symbol-tag {
+    font-weight: bold;
+    margin-left: 0.5rem;
+  }
+  #conn-info .symbol-tag.x { color: #e94560; }
+  #conn-info .symbol-tag.o { color: #00b4d8; }
 </style>
 </head>
 <body>
 <a class="back-home" href="../games/index.html">&#8592; Home</a>
+
+<!-- Lobby overlay (hidden in local mode) -->
+<div id="lobby" class="hidden">
+  <h2>Tic Tac Toe — Multiplayer</h2>
+  <div class="lobby-section">
+    <h3>Create a new room</h3>
+    <button id="create-btn" class="lobby-btn">Create Room</button>
+    <div id="room-code-display"></div>
+    <div id="waiting-msg"></div>
+  </div>
+  <div class="lobby-section">
+    <h3>Join an existing room</h3>
+    <input id="join-input" type="text" maxlength="6" placeholder="Room code">
+    <button id="join-btn" class="lobby-btn">Join</button>
+  </div>
+  <div id="lobby-error"></div>
+</div>
+
 <h1>Tic Tac Toe</h1>
+<div id="conn-info"></div>
 <div id="status">X's turn</div>
 <div id="board"></div>
 <button id="restart">Restart</button>
+
 <script>
-const board = document.getElementById('board');
-const status = document.getElementById('status');
+// ─── Mode detection ───
+const params = new URLSearchParams(window.location.search);
+const IS_LOCAL = params.get('mode') === 'local';
+
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
 const restartBtn = document.getElementById('restart');
+const lobbyEl = document.getElementById('lobby');
+const connInfoEl = document.getElementById('conn-info');
+
 const WIN_COMBOS = [
   [0,1,2],[3,4,5],[6,7,8],
   [0,3,6],[1,4,7],[2,5,8],
@@ -87,22 +204,30 @@ const WIN_COMBOS = [
 ];
 let cells, currentPlayer, gameOver;
 
+// ─── Local mode (original behavior, used by tests) ───
+if (IS_LOCAL) {
+  init();
+  restartBtn.addEventListener('click', init);
+}
+
 function init() {
-  board.innerHTML = '';
+  boardEl.innerHTML = '';
   cells = Array(9).fill('');
   currentPlayer = 'X';
   gameOver = false;
-  status.textContent = "X's turn";
+  statusEl.textContent = "X's turn";
   for (let i = 0; i < 9; i++) {
     const btn = document.createElement('button');
     btn.classList.add('cell');
     btn.dataset.index = i;
-    btn.addEventListener('click', handleClick);
-    board.appendChild(btn);
+    btn.addEventListener('click', IS_LOCAL ? handleClickLocal : (e) => {
+      if (window.handleClickMultiplayer) window.handleClickMultiplayer(e);
+    });
+    boardEl.appendChild(btn);
   }
 }
 
-function handleClick(e) {
+function handleClickLocal(e) {
   const i = e.target.dataset.index;
   if (gameOver || cells[i]) return;
   cells[i] = currentPlayer;
@@ -113,25 +238,245 @@ function handleClick(e) {
   const winCombo = checkWin(currentPlayer);
   if (winCombo) {
     gameOver = true;
-    status.textContent = `${currentPlayer} wins!`;
-    winCombo.forEach(idx => board.children[idx].classList.add('win'));
+    statusEl.textContent = `${currentPlayer} wins!`;
+    winCombo.forEach(idx => boardEl.children[idx].classList.add('win'));
     return;
   }
   if (cells.every(c => c)) {
     gameOver = true;
-    status.textContent = "It's a draw!";
+    statusEl.textContent = "It's a draw!";
     return;
   }
   currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-  status.textContent = `${currentPlayer}'s turn`;
+  statusEl.textContent = `${currentPlayer}'s turn`;
 }
 
 function checkWin(player) {
   return WIN_COMBOS.find(combo => combo.every(i => cells[i] === player)) || null;
 }
 
-restartBtn.addEventListener('click', init);
-init();
+// ─── Multiplayer mode ───
+if (!IS_LOCAL) {
+  // Firebase SDK (compat CDN — no build step needed)
+  const script1 = document.createElement('script');
+  script1.src = 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js';
+  document.head.appendChild(script1);
+
+  script1.onload = () => {
+    const script2 = document.createElement('script');
+    script2.src = 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js';
+    document.head.appendChild(script2);
+    script2.onload = () => initMultiplayer();
+  };
+}
+
+function initMultiplayer() {
+  // ─── Firebase config ───
+  // Replace these values with your own Firebase project config
+  const firebaseConfig = {
+    apiKey: "AIzaSyCVB4sWwN4GHG8pJeOHsof2Sa2_7FgycB8",
+  authDomain: "my-first-game-tictactoe.firebaseapp.com",
+  databaseURL: "https://my-first-game-tictactoe-default-rtdb.firebaseio.com",
+  projectId: "my-first-game-tictactoe",
+  storageBucket: "my-first-game-tictactoe.firebasestorage.app",
+  messagingSenderId: "167577373452",
+  appId: "1:167577373452:web:6293446f1234356eee9729"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  let mySymbol = null; // 'X' or 'O'
+  let roomRef = null;
+  let roomCode = null;
+
+  // Show lobby
+  lobbyEl.classList.remove('hidden');
+
+  const createBtn = document.getElementById('create-btn');
+  const joinBtn = document.getElementById('join-btn');
+  const joinInput = document.getElementById('join-input');
+  const lobbyError = document.getElementById('lobby-error');
+  const waitingMsg = document.getElementById('waiting-msg');
+  const roomCodeDisplay = document.getElementById('room-code-display');
+
+  // Check URL hash for auto-join
+  const hashMatch = window.location.hash.match(/room=([A-Za-z0-9]{6})/);
+  if (hashMatch) {
+    joinInput.value = hashMatch[1];
+    joinRoom(hashMatch[1].toUpperCase());
+  }
+
+  createBtn.addEventListener('click', () => {
+    lobbyError.textContent = '';
+    roomCode = generateRoomCode();
+    roomRef = db.ref('rooms/' + roomCode);
+
+    const initialState = {
+      board: ',,,,,,,,' ,  // 9 empty cells joined by comma
+      currentPlayer: 'X',
+      playerX: true,
+      playerO: false,
+      gameOver: false,
+      winner: null,
+      winCombo: null
+    };
+
+    roomRef.set(initialState).then(() => {
+      mySymbol = 'X';
+      roomCodeDisplay.textContent = roomCode;
+      waitingMsg.textContent = 'Waiting for opponent...';
+      createBtn.disabled = true;
+      window.location.hash = 'room=' + roomCode;
+
+      // Listen for opponent joining
+      roomRef.child('playerO').on('value', (snap) => {
+        if (snap.val() === true) {
+          startGame();
+        }
+      });
+    }).catch(err => {
+      lobbyError.textContent = 'Error creating room. Check Firebase config.';
+      console.error(err);
+    });
+  });
+
+  joinBtn.addEventListener('click', () => {
+    lobbyError.textContent = '';
+    const code = joinInput.value.trim().toUpperCase();
+    if (code.length !== 6) {
+      lobbyError.textContent = 'Room code must be 6 characters.';
+      return;
+    }
+    joinRoom(code);
+  });
+
+  joinInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') joinBtn.click();
+  });
+
+  function joinRoom(code) {
+    const ref = db.ref('rooms/' + code);
+    ref.once('value').then((snap) => {
+      if (!snap.exists()) {
+        lobbyError.textContent = 'Room not found.';
+        return;
+      }
+      const data = snap.val();
+      if (data.playerO === true) {
+        lobbyError.textContent = 'Room is full.';
+        return;
+      }
+      // Join as O
+      roomCode = code;
+      roomRef = ref;
+      mySymbol = 'O';
+      ref.child('playerO').set(true).then(() => {
+        window.location.hash = 'room=' + roomCode;
+        startGame();
+      });
+    }).catch(err => {
+      lobbyError.textContent = 'Error joining room. Check Firebase config.';
+      console.error(err);
+    });
+  }
+
+  function startGame() {
+    lobbyEl.classList.add('hidden');
+    connInfoEl.innerHTML = `Room: <span class="room-tag">${roomCode}</span>` +
+      `<span class="symbol-tag ${mySymbol.toLowerCase()}">You are ${mySymbol}</span>`;
+    init();
+
+    // Listen for game state changes
+    roomRef.on('value', (snap) => {
+      const data = snap.val();
+      if (!data) return;
+
+      // Update local state from Firebase
+      const boardArr = data.board.split(',');
+      cells = boardArr.map(c => c || '');
+      currentPlayer = data.currentPlayer;
+      gameOver = data.gameOver || false;
+
+      // Render board
+      renderBoard();
+
+      // Update status
+      if (data.gameOver) {
+        if (data.winner) {
+          statusEl.textContent = `${data.winner} wins!`;
+          if (data.winCombo) {
+            data.winCombo.forEach(idx => boardEl.children[idx].classList.add('win'));
+          }
+        } else {
+          statusEl.textContent = "It's a draw!";
+        }
+      } else {
+        if (currentPlayer === mySymbol) {
+          statusEl.textContent = "Your turn (" + mySymbol + ")";
+        } else {
+          statusEl.textContent = "Opponent's turn (" + currentPlayer + ")";
+        }
+      }
+    });
+  }
+
+  function renderBoard() {
+    const btns = boardEl.querySelectorAll('.cell');
+    btns.forEach((btn, i) => {
+      btn.textContent = cells[i] || '';
+      btn.className = 'cell';
+      if (cells[i]) {
+        btn.classList.add('taken', cells[i].toLowerCase());
+      }
+    });
+  }
+
+  function handleClickMultiplayer(e) {
+    const i = e.target.dataset.index;
+    if (gameOver || cells[i]) return;
+    if (currentPlayer !== mySymbol) return; // not your turn
+
+    // Write move to Firebase
+    const newBoard = [...cells];
+    newBoard[i] = mySymbol;
+
+    const winCombo = WIN_COMBOS.find(combo => combo.every(idx => newBoard[idx] === mySymbol)) || null;
+    const isDraw = !winCombo && newBoard.every(c => c);
+
+    const update = {
+      board: newBoard.join(','),
+      currentPlayer: mySymbol === 'X' ? 'O' : 'X',
+      gameOver: !!winCombo || isDraw,
+      winner: winCombo ? mySymbol : null,
+      winCombo: winCombo || null
+    };
+
+    roomRef.update(update);
+  }
+
+  // Make handleClickMultiplayer accessible to init()
+  window.handleClickMultiplayer = handleClickMultiplayer;
+
+  // Restart button in multiplayer mode
+  restartBtn.addEventListener('click', () => {
+    if (!roomRef) return;
+    roomRef.update({
+      board: ',,,,,,,,',
+      currentPlayer: 'X',
+      gameOver: false,
+      winner: null,
+      winCombo: null
+    });
+  });
+
+  function generateRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/1/O/0 to avoid confusion
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+}
 </script>
 </body>
 </html>
